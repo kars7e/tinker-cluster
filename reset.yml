@@ -1,0 +1,6 @@
+---
+- hosts: all
+  become: true
+  tasks:
+  - name: kubeadm reset
+    shell: kubeadm reset

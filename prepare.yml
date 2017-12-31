@@ -1,0 +1,3 @@
+dbus-uuidgen > /var/lib/dbus/machine-id
+rm /etc/machine-id
+systemd-machine-id-setup
