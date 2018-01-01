@@ -1,6 +1,6 @@
 # my global config
 global:
-  scrape_interval:     10s # Set the scrape interval to every 15 seconds. Default is every 1 minute.
+  scrape_interval:     5s # Set the scrape interval to every 15 seconds. Default is every 1 minute.
   evaluation_interval: 15s # Evaluate rules every 15 seconds. The default is every 1 minute.
   # scrape_timeout is set to the global default (10s).
 
@@ -28,6 +28,7 @@ scrape_configs:
       - '192.168.11.41:9100'
       - '192.168.11.41:9243'
 - job_name: 'tinker-2'
+  static_configs:
     - targets:
       - '192.168.11.42:9100'
       - '192.168.11.42:9243'
