@@ -1,0 +1,9 @@
+[Unit]
+Description=RPi Exporter
+
+[Service]
+User=nobody
+ExecStart=/usr/local/bin/rpi_exporter
+
+[Install]
+WantedBy=multi-user.target

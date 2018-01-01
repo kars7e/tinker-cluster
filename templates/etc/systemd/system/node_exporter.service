@@ -2,7 +2,7 @@
 Description=Node Exporter
 
 [Service]
-User=nobody
+User=root
 ExecStart=/usr/local/bin/node_exporter
 
 [Install]
