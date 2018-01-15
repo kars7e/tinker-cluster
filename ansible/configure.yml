@@ -32,96 +32,28 @@
       enabled: yes
       state: started
 
-  - name: Add Google cloud key
-    apt_key:
-      url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
-      state: present
-  - name: Add Kubernetes repository
-    apt_repository:
-      repo: deb http://apt.kubernetes.io/ kubernetes-xenial main
-      state: present
-      filename: 'kubernetes'
-
-  - name: Install Kubeadm & other required packages
+  - name: Install nfs-commons
     apt:
       name: "{{ item }}"
       state: installed
       update_cache: yes
     with_items:
-    - kubeadm
     - nfs-common
 
-  - name: Check if node exporter is installed
-    stat:
-      path: /usr/local/bin/node_exporter
-    register: node_exporter
-
-  - name: Download node exporter
-    get_url:
-      url: https://github.com/prometheus/node_exporter/releases/download/v0.15.2/node_exporter-0.15.2.linux-armv7.tar.gz
-      dest: /tmp/node_exporter.tar.gz
-      mode: 0666
-    when: not node_exporter.stat.exists
-
-  - name: Extract node exporter into /usr/local/bin
-    unarchive:
-      src: /tmp/node_exporter.tar.gz
-      dest: /usr/local/bin
-      remote_src: yes
-      extra_opts:
-      - "--strip-components=1"
-    when: not node_exporter.stat.exists
-
-  - name: Install node exporter systemd unit file
-    template:
-      src: templates/etc/systemd/system/node_exporter.service
-      dest: /etc/systemd/system/node_exporter.service
-      owner: root
-      group: root
-      mode: 0644
-
-  - name: Make sure node exporter is enabled and running
+  - name: disable zram
     systemd:
-      state: started
-      name: node_exporter
-      daemon_reload: yes
-      enabled: yes
+      name: zram-config
+      enabled: no
+      state: stopped
 
-  - name: Check if rpi exporter is installed
-    stat:
-      path: /usr/local/bin/rpi_exporter
-    register: rpi_exporter
+  - name: disable swap
+    shell: swapoff -a
 
-  - name: Download rpi exporter
-    get_url:
-      url: https://github.com/lukasmalkmus/rpi_exporter/releases/download/v0.3.0/rpi_exporter-0.3.0.linux-armv7.tar.gz
-      dest: /tmp/rpi_exporter.tar.gz
-      mode: 0666
-    when: not rpi_exporter.stat.exists
-
-  - name: Extract rpi exporter into /usr/local/bin
-    unarchive:
-      src: /tmp/rpi_exporter.tar.gz
-      dest: /usr/local/bin
-      remote_src: yes
-      extra_opts:
-      - "--strip-components=1"
-    when: not rpi_exporter.stat.exists
-
-  - name: Install rpi exporter systemd unit file
-    template:
-      src: templates/etc/systemd/system/rpi_exporter.service
-      dest: /etc/systemd/system/rpi_exporter.service
-      owner: root
-      group: root
-      mode: 0644
-
-  - name: Make sure rpi exporter is enabled and running
-    systemd:
-      state: started
-      name: rpi_exporter
-      daemon_reload: yes
-      enabled: yes
+  - name: pass bridged traffic to iptables
+    sysctl:
+      name: net.bridge.bridge-nf-call-iptables
+      value: 1
+      state: present
 
   - name: Check if docker is installed
     command: dpkg-query -l docker-ce
@@ -139,55 +71,3 @@
   - name: Install docker
     shell: /tmp/docker.sh
     when: is_docker_installed.rc == 1 
-
-  - name: disable zram
-    systemd:
-      name: zram-config
-      enabled: no
-      state: stopped
-
-  - name: disable swap
-    shell: swapoff -a
-
-  - name: pass bridged traffic to iptables
-    sysctl:
-      name: net.bridge.bridge-nf-call-iptables
-      value: 1
-      state: present
-
-
-- hosts: k8s-master
-  become: true
-  vars:
-    token: bb14ca.e8bbbedf40c58788
-  tasks:
-  - name: Check if kubeadm already installed kubernetes
-    stat:
-      path: /etc/kubernetes/admin.conf
-    register: admin_conf
-
-  - name: kubeadm init on master
-    shell: "kubeadm init --token {{token}}"
-    when: not admin_conf.stat.exists
-
-  - name: Install Weave
-    shell: |
-      export kubever=$(kubectl version | base64 | tr -d '\n')
-      kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f "https://cloud.weave.works/k8s/net?k8s-version=$kubever"
-    when: not admin_conf.stat.exists
-
-
-- hosts: k8s-node
-  become: true
-  vars:
-    token: bb14ca.e8bbbedf40c58788
-  tasks:
-  - name: Check if kubelet conf already exists
-    stat:
-      path: /etc/kubernetes/kubelet.conf
-    register: kubelet_conf
-
-  - name: kubeadm join on nodes
-    shell: kubeadm join --discovery-token-unsafe-skip-ca-verification --token {{token}} {{ hostvars[groups['k8s-master'][0]]['ansible_eth0']['ipv4']['address'] }}:6443
-    when: not kubelet_conf.stat.exists
-

@@ -1,0 +1,75 @@
+---
+- hosts: all
+  become: true
+  tasks:
+  - name: Check if node exporter is installed
+    stat:
+      path: /usr/local/bin/node_exporter
+    register: node_exporter
+
+  - name: Download node exporter
+    get_url:
+      url: https://github.com/prometheus/node_exporter/releases/download/v0.15.2/node_exporter-0.15.2.linux-armv7.tar.gz
+      dest: /tmp/node_exporter.tar.gz
+      mode: 0666
+    when: not node_exporter.stat.exists
+
+  - name: Extract node exporter into /usr/local/bin
+    unarchive:
+      src: /tmp/node_exporter.tar.gz
+      dest: /usr/local/bin
+      remote_src: yes
+      extra_opts:
+      - "--strip-components=1"
+    when: not node_exporter.stat.exists
+
+  - name: Install node exporter systemd unit file
+    template:
+      src: templates/etc/systemd/system/node_exporter.service
+      dest: /etc/systemd/system/node_exporter.service
+      owner: root
+      group: root
+      mode: 0644
+
+  - name: Make sure node exporter is enabled and running
+    systemd:
+      state: started
+      name: node_exporter
+      daemon_reload: yes
+      enabled: yes
+
+  - name: Check if rpi exporter is installed
+    stat:
+      path: /usr/local/bin/rpi_exporter
+    register: rpi_exporter
+
+  - name: Download rpi exporter
+    get_url:
+      url: https://github.com/lukasmalkmus/rpi_exporter/releases/download/v0.3.0/rpi_exporter-0.3.0.linux-armv7.tar.gz
+      dest: /tmp/rpi_exporter.tar.gz
+      mode: 0666
+    when: not rpi_exporter.stat.exists
+
+  - name: Extract rpi exporter into /usr/local/bin
+    unarchive:
+      src: /tmp/rpi_exporter.tar.gz
+      dest: /usr/local/bin
+      remote_src: yes
+      extra_opts:
+      - "--strip-components=1"
+    when: not rpi_exporter.stat.exists
+
+  - name: Install rpi exporter systemd unit file
+    template:
+      src: templates/etc/systemd/system/rpi_exporter.service
+      dest: /etc/systemd/system/rpi_exporter.service
+      owner: root
+      group: root
+      mode: 0644
+
+  - name: Make sure rpi exporter is enabled and running
+    systemd:
+      state: started
+      name: rpi_exporter
+      daemon_reload: yes
+      enabled: yes

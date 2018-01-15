@@ -1,0 +1,59 @@
+---
+- hosts: all
+  become: true
+  tasks:
+  - name: Add Google cloud key
+    apt_key:
+      url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
+      state: present
+
+  - name: Add Kubernetes repository
+    apt_repository:
+      repo: deb http://apt.kubernetes.io/ kubernetes-xenial main
+      state: present
+      filename: 'kubernetes'
+
+  - name: Install Kubeadm
+    apt:
+      name: "{{ item }}"
+      state: installed
+      update_cache: yes
+    with_items:
+    - kubeadm
+
+
+- hosts: k8s-master
+  become: true
+  vars:
+    token: bb14ca.e8bbbedf40c58788
+  tasks:
+  - name: Check if kubeadm already installed kubernetes
+    stat:
+      path: /etc/kubernetes/admin.conf
+    register: admin_conf
+
+  - name: kubeadm init on master
+    shell: "kubeadm init --token {{token}}"
+    when: not admin_conf.stat.exists
+
+  - name: Install Weave
+    shell: |
+      export kubever=$(kubectl version | base64 | tr -d '\n')
+      kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f "https://cloud.weave.works/k8s/net?k8s-version=$kubever"
+    when: not admin_conf.stat.exists
+
+
+- hosts: k8s-node
+  become: true
+  vars:
+    token: bb14ca.e8bbbedf40c58788
+  tasks:
+  - name: Check if kubelet conf already exists
+    stat:
+      path: /etc/kubernetes/kubelet.conf
+    register: kubelet_conf
+
+  - name: kubeadm join on nodes
+    shell: kubeadm join --discovery-token-unsafe-skip-ca-verification --token {{token}} {{ hostvars[groups['k8s-master'][0]]['ansible_eth0']['ipv4']['address'] }}:6443
+    when: not kubelet_conf.stat.exists
+
