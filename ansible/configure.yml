@@ -10,6 +10,27 @@
       state: present
     with_items: "{{ groups['all'] }}"
 
+  - name: Check if machine id has been already reconfigured
+    stat:
+      path: /etc/machine_id_configured
+    register: machine_id_configured
+
+  - name: Reconfigure machine id if not done yet
+    shell: |
+      dbus-uuidgen > /var/lib/dbus/machine-id
+      rm /etc/machine-id
+      systemd-machine-id-setup
+    when: not machine_id_configured.stat.exists
+
+  - name: Create check file if not exists
+    file:
+      path: /etc/machine_id_configured
+      state: touch
+      owner: root
+      group: sys
+      mode: 0555
+    when: not machine_id_configured.stat.exists
+
   - name: disable & stop wpa_supplicant
     systemd:
       name: wpa_supplicant
@@ -32,11 +53,15 @@
       enabled: yes
       state: started
 
+  - name: Upgrade packages
+    apt:
+      update_cache: yes
+      upgrade: safe
+
   - name: Install nfs-commons
     apt:
       name: "{{ item }}"
       state: installed
-      update_cache: yes
     with_items:
     - nfs-common
 
