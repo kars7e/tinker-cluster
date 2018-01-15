@@ -1,0 +1,57 @@
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: prometheus-tinker-pv-claim
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: ""
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus-tinker
+  labels:
+    app: prometheus-tinker
+spec:
+  selector:
+    matchLabels:
+      app: prometheus-tinker
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: prometheus-tinker
+    spec:
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      terminationGracePeriodSeconds: 30
+      containers:
+      - image: kars7e/prometheus-tinker:latest
+        imagePullPolicy: Always
+        name: prometheus-tinker
+        command:
+        - "/bin/prometheus"
+        args:
+        - "--config.file=/etc/prometheus/prometheus.yml"
+        - "--storage.tsdb.path=/prometheus"
+        - "--web.console.libraries=/etc/prometheus/console_libraries"
+        - "--web.console.templates=/etc/prometheus/consoles"
+        - "--storage.tsdb.retention=3d"
+        resources: {}
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - name: prometheus-tinker-storage
+          mountPath: /prometheus
+      volumes:
+        - name: prometheus-tinker-storage
+          persistentVolumeClaim:
+            claimName: prometheus-tinker-pv-claim

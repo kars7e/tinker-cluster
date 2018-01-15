@@ -10,6 +10,28 @@
       state: present
     with_items: "{{ groups['all'] }}"
 
+  - name: disable & stop wpa_supplicant
+    systemd:
+      name: wpa_supplicant
+      enabled: no
+      state: stopped
+
+  - name: Disable wifi driver via blacklist
+    kernel_blacklist:
+      name: r8723bs
+      state: present
+
+  - name: Unload wifi driver
+    modprobe:
+      name: r8723bs
+      state: absent
+
+  - name: ensure systemd-networkd is enabled and running
+    systemd:
+      name: systemd-networkd
+      enabled: yes
+      state: started
+
   - name: Add Google cloud key
     apt_key:
       url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
