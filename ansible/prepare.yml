@@ -1,3 +1,5 @@
-dbus-uuidgen > /var/lib/dbus/machine-id
-rm /etc/machine-id
-systemd-machine-id-setup
+# TODO: Add tasks for first boot
+
+# dbus-uuidgen > /var/lib/dbus/machine-id
+# rm /etc/machine-id
+# systemd-machine-id-setup
