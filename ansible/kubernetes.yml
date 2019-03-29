@@ -1,27 +1,4 @@
 ---
-- hosts: all
-  become: true
-  tasks:
-  - name: Add Google cloud key
-    apt_key:
-      url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
-      state: present
-
-  - name: Add Kubernetes repository
-    apt_repository:
-      repo: deb http://apt.kubernetes.io/ kubernetes-xenial main
-      state: present
-      filename: 'kubernetes'
-
-  - name: Install Kubeadm
-    apt:
-      name: "{{ item }}"
-      state: installed
-      update_cache: yes
-    with_items:
-    - kubeadm
-
-
 - hosts: k8s-master
   become: true
   vars:
@@ -33,7 +10,7 @@
     register: admin_conf
 
   - name: kubeadm init on master
-    shell: "kubeadm init --token {{token}}"
+    shell: "kubeadm init --token {{ token }} --feature-gates CoreDNS=true --ignore-preflight-errors Service-Docker,SystemVerification "
     when: not admin_conf.stat.exists
 
   - name: Install Weave
@@ -41,7 +18,6 @@
       export kubever=$(kubectl version | base64 | tr -d '\n')
       kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f "https://cloud.weave.works/k8s/net?k8s-version=$kubever"
     when: not admin_conf.stat.exists
-
 
 - hosts: k8s-node
   become: true
@@ -54,6 +30,6 @@
     register: kubelet_conf
 
   - name: kubeadm join on nodes
-    shell: kubeadm join --discovery-token-unsafe-skip-ca-verification --token {{token}} {{ hostvars[groups['k8s-master'][0]]['ansible_eth0']['ipv4']['address'] }}:6443
+    shell: kubeadm join  --ignore-preflight-errors CRI,Service-Docker,SystemVerification --feature-gates CoreDNS=true --discovery-token-unsafe-skip-ca-verification --token {{token}} {{ hostvars[groups['k8s-master'][0]]['ansible_eth0']['ipv4']['address'] }}:6443
     when: not kubelet_conf.stat.exists
 

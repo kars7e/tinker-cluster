@@ -1,0 +1,46 @@
+
+---
+- hosts: all
+  become: true
+  tasks:
+  - name: Check if docker is installed
+    command: dpkg-query -l docker-ce
+    register: is_docker_installed
+    failed_when: is_docker_installed.rc > 1
+    changed_when: no
+
+  - name: Download docker install script
+    get_url:
+      url: https://get.docker.com
+      dest: /tmp/docker.sh
+      mode: 0777
+    when: is_docker_installed.rc == 1 
+
+  - name: Install docker
+    shell: /tmp/docker.sh
+    when: is_docker_installed.rc == 1 
+
+  - name: Make sure docker is enabled and running
+    systemd:
+      state: started
+      name: docker
+      daemon_reload: yes
+      enabled: yes
+
+  - name: Make sure CRI-O is disabled and not running
+    systemd:
+      state: stopped
+      name: crio
+      daemon_reload: yes
+      enabled: no
+      
+  - name: Ensure CRI-O config does not exist
+    file:
+      path: "{{ item }}"
+      state: absent
+    with_items:
+          - /etc/systemd/system/kubelet.service.d/0-crio.conf
+
+  - name: Reload systemd
+    systemd:
+      daemon_reload: yes

@@ -1,0 +1,73 @@
+---
+- hosts: all
+  become: true
+  tasks:
+  - name: Check if disk was already configured
+    stat:
+      path: /etc/external_disk_configured
+    register: external_disk_configured
+
+  - name: Configure external disk - create partition
+    parted:
+      device: /dev/sda
+      number: 1
+      state: present
+      label: gpt
+    when: not external_disk_configured.stat.exists
+
+  - name: Configure external disk - create filesystem
+    filesystem:
+      fstype: ext4
+      dev: /dev/sda1
+    when: not external_disk_configured.stat.exists
+
+  - name: Temporarly mount external disk and copy var
+    shell: |
+      mkdir -p /mnt/newvar
+      mount /dev/sda1 /mnt/newvar || echo "already mounted"
+      rm -rf /mnt/newvar/*
+      cp -apx /var/* /mnt/newvar
+      mv /var /var.old
+      mkdir -p /var
+      umount /mnt/newvar
+      mount /dev/sda1 /var
+    when: not external_disk_configured.stat.exists
+
+  - name: Mount external disk as var
+    mount:
+      path: /var
+      src: /dev/sda1
+      fstype: ext4
+      opts: defaults,noatime,nodiratime
+      passno: 0
+      state: mounted
+    when: not external_disk_configured.stat.exists
+
+  - name: Create check file if not exists
+    file:
+      path: /etc/external_disk_configured
+      state: touch
+      owner: root
+      group: sys
+      mode: 0555
+    when: not external_disk_configured.stat.exists
+
+  - name: Disable log2ram
+    lineinfile:
+      path: /etc/default/log2ram
+      regexp: '^ENABLED='
+      line: 'ENABLED=false'
+
+  - name: Disable log2ram service
+    systemd:
+      name: log2ram
+      enabled: no
+      state: stopped
+
+  - name: disable zram
+    systemd:
+      name: zram-config
+      enabled: no
+      state: stopped
+
+

@@ -1,0 +1,88 @@
+
+---
+- hosts: all
+  become: true
+  vars:
+    crictl_url: "https://github.com/kubernetes-incubator/cri-tools/releases/download/v1.0.0-beta.0/crictl-v1.0.0-beta.0-linux-arm.tar.gz"
+  tasks:
+  - name: "Add CRI-O PPA repository"
+    apt_repository:
+      repo: ppa:projectatomic/ppa
+
+  - name: Install CRI-O
+    apt:
+      name: "{{ item }}"
+      state: latest
+      update_cache: yes
+    with_items:
+    - cri-o-1.10
+
+  # - name: Delete /etc/cni/net.d content, it will be populated by CNI driver later
+  #   file:
+  #     path: "/etc/cni/net.d"
+  #     state: absent
+  #   register: cni_config
+
+  - name: Ensure required directories exist
+    file:
+      path: "{{ item }}"
+      state: directory
+    with_items:
+          - /etc/systemd/system/kubelet.service.d/
+          - /etc/cni/net.d/
+
+  - name: Install custom CRI-O config
+    template:
+      src: templates/etc/crio/crio.conf
+      dest: /etc/crio/crio.conf
+      owner: root
+      group: root
+      mode: 0644
+    register: crio_config
+  
+  - name: Make sure CRI-O is restarted if config changes were made
+    systemd:
+      state: restarted
+      name: crio
+      daemon_reload: yes
+    when: crio_config.changed or cni_config.changed
+
+  - name: Make sure CRI-O is enabled and running
+    systemd:
+      state: started
+      name: crio
+      daemon_reload: yes
+      enabled: yes
+
+  - name: Make sure Docker is disabled and stopped
+    systemd:
+      state: stopped
+      name: docker
+      daemon_reload: yes
+      enabled: no
+    register: docker_disable
+    failed_when: docker_disable | failed and ("Could not find the requested service" not in docker_disable.msg)
+  
+  - name: Configure Kubelet to use CRIO using custom systemd drop-in
+    template:
+      src: templates/etc/systemd/system/kubelet.service.d/0-crio.conf
+      dest: /etc/systemd/system/kubelet.service.d/0-crio.conf
+      owner: root
+      group: root
+      mode: 0644
+
+  - name: Reload systemd
+    systemd:
+      daemon_reload: yes
+  
+  - name: Check if crictl is already installed
+    stat:
+      path: /usr/local/bin/crictl
+    register: crictl_installed
+  
+  - name: Download & install crictl
+    unarchive:
+      src: "{{ crictl_url }}"
+      dest: /usr/local/bin
+      remote_src: yes
+    when: not crictl_installed.stat.exists

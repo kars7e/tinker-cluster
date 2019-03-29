@@ -4,3 +4,30 @@
   tasks:
   - name: kubeadm reset
     shell: kubeadm reset
+
+  - name: clear CRI-O containers
+    shell: |
+      crictl stopp $(crictl pods -q)
+      crictl rmp $(crictl pods -q)
+      killall conmon || /bin/true
+
+  - name: Stop CRI-O (if exists)
+    systemd:
+      state: stopped
+      name: crio
+    register: crio_stop
+    failed_when: crio_stop | failed and ("Could not find the requested service" not in crio_stop.msg)
+
+  - name: Clear on-disk data
+    file:
+      path: /var/lib/containers
+      state: absent
+
+  - name: restart machine
+    shell: nohup sh -c '(sleep 5; shutdown -r now "Ansible restart") &' &>/dev/null
+
+  - name: wait for the system to start
+    wait_for_connection:
+      delay: 15
+      sleep: 5
+      timeout: 300

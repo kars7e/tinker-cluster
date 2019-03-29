@@ -2,13 +2,48 @@
 - hosts: all
   become: true
   tasks:
-  - name: "Build hosts file"
+  - name: Ensure network interfaces are managed by Network Manager
+    copy:
+      src: /etc/network/interfaces.network-manager
+      dest: /etc/network/interfaces
+      remote_src: yes
+
+  - name: Set hostname
+    hostname:
+      name: "{{ inventory_hostname }}"
+
+  - name: Build hosts file
     lineinfile:
       dest: /etc/hosts
       regexp: '.*{{ item }}$'
       line: "{{ hostvars[item]['ansible_eth0']['ipv4']['address'] }} {{item}}"
       state: present
     with_items: "{{ groups['all'] }}"
+
+  - name: Copy SSH keys
+    authorized_key:
+      user: root
+      state: present
+      key: "{{ lookup('file', '/Users/kstepniewski/.ssh/id_rsa.pub') }}"
+
+  - name: ensure systemd-networkd is disabled
+    systemd:
+      name: systemd-networkd
+      enabled: no
+      state: stopped
+
+  - name: Disable dnsmasq in Network Manager
+    lineinfile:
+      path: /etc/NetworkManager/NetworkManager.conf
+      regexp: '^dns='
+      line: 'dns=default'
+    register: nm_config 
+
+  - name: Restart Network-Manager
+    systemd:
+      name: network-manager
+      state: restarted
+    when: nm_config.changed
 
   - name: Check if machine id has been already reconfigured
     stat:
@@ -47,30 +82,6 @@
       name: r8723bs
       state: absent
 
-  - name: ensure systemd-networkd is enabled and running
-    systemd:
-      name: systemd-networkd
-      enabled: yes
-      state: started
-
-  - name: Upgrade packages
-    apt:
-      update_cache: yes
-      upgrade: safe
-
-  - name: Install nfs-commons
-    apt:
-      name: "{{ item }}"
-      state: installed
-    with_items:
-    - nfs-common
-
-  - name: disable zram
-    systemd:
-      name: zram-config
-      enabled: no
-      state: stopped
-
   - name: disable swap
     shell: swapoff -a
 
@@ -80,19 +91,36 @@
       value: 1
       state: present
 
-  - name: Check if docker is installed
-    command: dpkg-query -l docker-ce
-    register: is_docker_installed
-    failed_when: is_docker_installed.rc > 1
-    changed_when: no
+  - name: Upgrade packages
+    apt:
+      update_cache: yes
+      upgrade: safe
 
-  - name: Download docker install script
-    get_url:
-      url: https://get.docker.com
-      dest: /tmp/docker.sh
-      mode: 0777
-    when: is_docker_installed.rc == 1 
+  - name: Install nfs-commons (used in k8s to mount NFS shares)
+    apt:
+      name: "{{ item }}"
+      state: installed
+    with_items:
+    - nfs-common
 
-  - name: Install docker
-    shell: /tmp/docker.sh
-    when: is_docker_installed.rc == 1 
+  - name: Add Google cloud key
+    apt_key:
+      url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
+      state: present
+
+  - name: Add Kubernetes repository
+    apt_repository:
+      repo: deb http://apt.kubernetes.io/ kubernetes-xenial main
+      state: present
+      filename: 'kubernetes'
+
+  - name: Install required binaries
+    apt:
+      name: "{{ item }}"
+      state: latest
+      update_cache: yes
+    with_items:
+    - kubeadm
+    - kubelet
+    - kubectl
+    - kubernetes-cni

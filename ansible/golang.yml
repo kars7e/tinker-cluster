@@ -1,0 +1,19 @@
+---
+- hosts: all
+  become: true
+  tasks:
+  - name: Check Golang version
+    shell: /usr/local/go/bin/go version
+    register: go_version
+    failed_when: false
+    changed_when: false
+
+  - name: install Golang upstream
+    unarchive:
+      src: "https://dl.google.com/go/go1.10.1.linux-armv6l.tar.gz"
+      dest: "/usr/local"
+      remote_src: True
+    when: '"go1.10" not in go_version.stdout'
+
+  - name: link golang
+    file: src=/usr/local/go/bin/go dest=/usr/bin/go state=link
